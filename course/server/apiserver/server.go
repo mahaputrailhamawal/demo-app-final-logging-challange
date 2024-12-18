@@ -14,7 +14,7 @@ import (
 	bookingsrv "github.com/imrenagicom/demo-app/course/server/booking"
 	catalogsrv "github.com/imrenagicom/demo-app/course/server/catalog"
 	"github.com/imrenagicom/demo-app/internal/config"
-	grpc "github.com/imrenagicom/demo-app/internal/grpc"
+	grpcutil "github.com/imrenagicom/demo-app/internal/grpc"
 	"github.com/imrenagicom/demo-app/internal/util"
 	v1 "github.com/imrenagicom/demo-app/pkg/apiclient/course/v1"
 
