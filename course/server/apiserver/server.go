@@ -23,7 +23,6 @@ import (
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/internal/grpcutil"
 )
 
 var serviceTelemetryName = "course-service"
