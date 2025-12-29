@@ -8,6 +8,7 @@ import (
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/google/uuid"
 	"github.com/imrenagicom/demo-app/internal/db"
 	"github.com/jmoiron/sqlx"
 	"github.com/redis/go-redis/v9"
@@ -80,6 +81,13 @@ func (s *Store) FindAllCourse(ctx context.Context, opts ...ListOption) ([]Course
 }
 
 func (s *Store) FindCourseByID(ctx context.Context, id string) (*Course, error) {
+	// Validate UUID format first
+	if _, err := uuid.Parse(id); err != nil {
+		return nil, db.ErrInvalidArgument{
+			Message: fmt.Sprintf("invalid course id format: %s", id),
+		}
+	}
+
 	c := Course{}
 	sb := sq.StatementBuilder.RunWith(s.dbCache)
 	getConcert := sb.
@@ -100,7 +108,7 @@ func (s *Store) FindCourseByID(ctx context.Context, id string) (*Course, error) 
 	selectBatches := sb.
 		Select("id", "name", "max_seats", "available_seats", "price", "currency", "start_date", "end_date", "version").
 		From("course_batches").
-		Where(sq.Eq{"course_id": c.ID, "deleted_at": nil, "status": BatchStatusPublished}).
+		Where(sq.Eq{"course_id": c.ID.String(), "deleted_at": nil, "status": BatchStatusPublished}).
 		PlaceholderFormat(sq.Dollar)
 	rows, err := selectBatches.QueryContext(ctx)
 	if err != nil {
@@ -129,7 +137,7 @@ func (c *Store) CreateCourse(ctx context.Context, course *Course) error {
 	insertCourse := sb.
 		Insert("courses").
 		Columns("id", "name", "slug", "description", "status", "published_at", "created_at", "updated_at").
-		Values(course.ID, course.Name, course.Slug, course.Description, course.Status, course.PublishedAt, course.CreatedAt, course.UpdatedAt).
+		Values(course.ID.String(), course.Name, course.Slug, course.Description, course.Status, course.PublishedAt, course.CreatedAt, course.UpdatedAt).
 		PlaceholderFormat(sq.Dollar)
 
 	insertBatches := sb.
@@ -137,7 +145,7 @@ func (c *Store) CreateCourse(ctx context.Context, course *Course) error {
 		Columns("id", "name", "max_seats", "available_seats", "price", "currency", "start_date", "end_date", "course_id", "created_at", "updated_at", "status").
 		PlaceholderFormat(sq.Dollar)
 	for _, b := range course.Batches {
-		insertBatches = insertBatches.Values(b.ID, b.Name, b.MaxSeats, b.AvailableSeats, b.Price, b.Currency, b.StartDate, b.EndDate, course.ID, b.CreatedAt, b.UpdatedAt, b.Status)
+		insertBatches = insertBatches.Values(b.ID.String(), b.Name, b.MaxSeats, b.AvailableSeats, b.Price, b.Currency, b.StartDate, b.EndDate, course.ID.String(), b.CreatedAt, b.UpdatedAt, b.Status)
 	}
 
 	_, err = insertCourse.ExecContext(ctx)
@@ -232,7 +240,7 @@ func (c *Store) UpdateBatchAvailableSeats(ctx context.Context, b *Batch, opts ..
 		Set("available_seats", b.AvailableSeats).
 		Set("version", b.Version+1).
 		Set("updated_at", time.Now()).
-		Where(sq.Eq{"id": b.ID, "version": b.Version}).
+		Where(sq.Eq{"id": b.ID.String(), "version": b.Version}).
 		PlaceholderFormat(sq.Dollar)
 
 	res, err := updateSeat.ExecContext(ctx)

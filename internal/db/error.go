@@ -22,3 +22,15 @@ func (e ErrResourceNotFound) Error() string {
 func (e ErrResourceNotFound) GRPCStatus() *status.Status {
 	return status.New(codes.NotFound, e.Error())
 }
+
+type ErrInvalidArgument struct {
+	Message string
+}
+
+func (e ErrInvalidArgument) Error() string {
+	return e.Message
+}
+
+func (e ErrInvalidArgument) GRPCStatus() *status.Status {
+	return status.New(codes.InvalidArgument, e.Error())
+}
