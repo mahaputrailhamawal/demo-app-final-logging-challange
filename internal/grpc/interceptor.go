@@ -2,12 +2,16 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func Logger() logging.Logger {
@@ -99,4 +103,86 @@ func (w *wrappedStream) Context() context.Context {
 
 func newWrappedStream(s grpc.ServerStream) grpc.ServerStream {
 	return &wrappedStream{s}
+}
+
+func UnaryServerErrorInterceptor() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler) (interface{}, error) {
+		resp, err := handler(ctx, req)
+		if err != nil {
+			return nil, convertToGRPCError(err)
+		}
+		return resp, nil
+	}
+}
+
+func convertToGRPCError(err error) error {
+	// Check if error already has gRPC status
+	if _, ok := status.FromError(err); ok {
+		return err
+	}
+
+	// Unwrap and check context errors more aggressively
+	unwrappedErr := err
+	for unwrappedErr != nil {
+		// Check context.Canceled
+		if errors.Is(unwrappedErr, context.Canceled) {
+			return status.Error(codes.Canceled, "request was canceled")
+		}
+		// Check context.DeadlineExceeded
+		if errors.Is(unwrappedErr, context.DeadlineExceeded) {
+			return status.Error(codes.DeadlineExceeded, "request deadline exceeded")
+		}
+		// Unwrap one level
+		unwrappedErr = errors.Unwrap(unwrappedErr)
+	}
+
+	// Also check error message as fallback (for deeply wrapped errors)
+	errMsg := err.Error()
+	log.Debug().
+		Str("error_type", fmt.Sprintf("%T", err)).
+		Str("error_msg", errMsg).
+		Msg("converting error to gRPC status")
+	if strings.Contains(errMsg, "context canceled") {
+		return status.Error(codes.Canceled, "request was canceled")
+	}
+	if strings.Contains(errMsg, "context deadline exceeded") {
+		return status.Error(codes.DeadlineExceeded, "request deadline exceeded")
+	}
+
+	// Handle database connection errors
+	if strings.Contains(errMsg, "driver: bad connection") ||
+		strings.Contains(errMsg, "connection refused") ||
+		strings.Contains(errMsg, "connection reset") ||
+		strings.Contains(errMsg, "broken pipe") {
+		return status.Error(codes.Unavailable, "database connection unavailable")
+	}
+
+	// Handle booking-specific errors by message
+	if strings.Contains(errMsg, "booking already expired") {
+		return status.Error(codes.FailedPrecondition, "booking already expired")
+	}
+	if strings.Contains(errMsg, "reservation max retry exceeded") {
+		return status.Error(codes.ResourceExhausted, "reservation max retry exceeded")
+	}
+	if strings.Contains(errMsg, "booking release max retry exceeded") {
+		return status.Error(codes.ResourceExhausted, "booking release max retry exceeded")
+	}
+
+	// Handle seat availability errors
+	if strings.Contains(errMsg, "class is sold out") ||
+		strings.Contains(errMsg, "no seat available") {
+		return status.Error(codes.ResourceExhausted, "seats are not available")
+	}
+	if strings.Contains(errMsg, "class is not available for sale") {
+		return status.Error(codes.FailedPrecondition, "class is not available for sale")
+	}
+
+	// Handle PostgreSQL UUID errors
+	if strings.Contains(errMsg, "invalid input syntax for type uuid") {
+		return status.Error(codes.InvalidArgument, "invalid UUID format")
+	}
+
+	// Default to Internal error for unexpected errors
+	return status.Error(codes.Internal, err.Error())
 }

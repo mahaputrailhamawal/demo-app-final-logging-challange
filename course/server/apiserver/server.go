@@ -121,6 +121,7 @@ func (s *Server) newGRPCServer(ctx context.Context) *grpc.Server {
 		grpc.ChainUnaryInterceptor(
 			grpcutil.UnaryServerAppLoggerInterceptor(),
 			grpcutil.UnaryServerGRPCLoggerInterceptor(),
+			grpcutil.UnaryServerErrorInterceptor(),
 		),
 		grpc.ChainStreamInterceptor(
 			grpcutil.StreamServerAppLoggerInterceptor(),
