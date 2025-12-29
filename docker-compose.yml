@@ -31,7 +31,14 @@ services:
     restart: always
     volumes:
       - postgres:/var/lib/postgresql/data/
-
+    depends_on:
+      - fluentbit
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24224
+        fluentd-async: 'true'
+        tag: postgres
   redis:
     image: bitnami/redis:7.0
     environment:
